@@ -1,0 +1,41 @@
+High level tentative plan probably
+-> Team models (Classification model, meaning win or loss)
+    -> takes in inputs of team stats, opponent stats, home/away, rest days, conditions, news etc
+    -> binary outcome, win or lose (1 or 0)
+    -> potential model: **1** randomforestclassifier, gradientboostingclassifier, MLPClassifier
+-> Score/stat models (Regression model, numerical)
+    -> Takes in same inputs, maybe more
+    -> predicts final score, total goals scored, or other team numbers like total shots
+    -> potential models: randomforestregressor, gradientboostingregressor, MLPregressor
+-> Player models (Regression model)
+    -> Predict player performance per game
+    -> Each player can have their own model or one shared model trained on all players with "player name" as a feature
+-> Combine models
+    -> Combine player prediction to add to team model as new team features
+    -> Better win/loss accuracy, and team stats
+    -> Maybe more complex stuff after
+Sci-kit models used and for what purpose
+
+Other libraries:
+pandas, numpy for data handling or preprocessing
+matplotlib for visualization
+json, requests for api fetching
+
+Cur things to do for me
+1. Learn about classifier (random forest) using Iris dataset
+2. Learn about regressor (random forest) using housing prices or smth just small 1-2 day things
+
+
+Notes / Questions answered:
+
+- “Player name as feature” = one shared model learns how each player performs using player ID encoded as input.
+- “Combining models” = take outputs (e.g., predicted team goals) from one model and feed them as inputs to another (stacked models).
+- Classifier → predicts categories (win/loss)
+- Regressor → predicts numbers (scores/stats)
+- Gradient Boosting → trees fix each other’s mistakes
+- MLP → neural network, like what I built manually
+
+
+
+**1** 
+Random forest classifier:
