@@ -3,7 +3,7 @@ import requests
 import pandas as pd
 
 ##Season and team name
-seasons = ["20242025", "20232024", "20222023", "20212022", "20202021"]
+seasons = ["20202021", "20222023", "20212022", "20202021"]
 TEAMS = ["ANA", "UTA", "ARI","BOS","BUF","CGY","CAR","CHI","COL","CBJ","DAL","DET","EDM",
     "FLA","LAK","MIN","MTL","NSH","NJD","NYI","NYR","OTT","PHI","PIT","SEA",
     "SJS","STL","TBL","TOR","VAN","VGK","WSH","WPG"]
@@ -31,9 +31,9 @@ COLUMNS = [
 
 for SEASON in seasons:
     try:
-        FILENAME = "%sGameData"%SEASON
+        FILENAME = "rawData/%sGameData"%SEASON
         df = pd.DataFrame(columns=COLUMNS)
-        df.to_csv(FILENAME, index=False)
+        df.to_csv("%s.csv"%FILENAME, index=False)
 
         #seen ids so no duplicate games
         seen_ids = []
@@ -207,9 +207,8 @@ for SEASON in seasons:
                 ##after a full team is done, add to csv, clear rows
                 if rows:  # only if we actually have data
                     df = pd.DataFrame(rows)
-                    if "game_id" in df.columns and not df.empty:
-                        df.sort_values(by="game_id", inplace=True)
-                    df.to_csv(FILENAME, mode="a", header=False, index=False)
+                   
+                    df.to_csv("%s.csv"%FILENAME, mode="a", header=False, index=False)
                     print(f"Added {len(rows)} games for {team}")
                     rows = []
                 else:
