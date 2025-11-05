@@ -22,11 +22,10 @@ matplotlib for visualization
 json, requests for api fetching
 
 Cur things to do for me
-1. Learn about classifier (random forest) using Iris dataset
-2. Learn about regressor (random forest) using housing prices or smth just small 1-2 day things
+1. finish processing data into samples
 
 
-Notes / Questions answered:
+Notes:
 
 - “Player name as feature” = one shared model learns how each player performs using player ID encoded as input.
 - “Combining models” = take outputs (e.g., predicted team goals) from one model and feed them as inputs to another (stacked models).
@@ -39,3 +38,8 @@ Notes / Questions answered:
 
 **1** 
 Random forest classifier:
+Lots of decision trees, decids like where cut offs are by training
+e.g. if greater than 0.5 go down this way to this node, else go other way
+and eventually it reaches leafs which classify, this is a cat, this is a dog
+u can choose num of trees, more trees better because 100 people voting is better than 10
+Each tree picks its own thresholds to minimize impurities
