@@ -43,3 +43,42 @@ e.g. if greater than 0.5 go down this way to this node, else go other way
 and eventually it reaches leafs which classify, this is a cat, this is a dog
 u can choose num of trees, more trees better because 100 people voting is better than 10
 Each tree picks its own thresholds to minimize impurities
+
+
+
+
+CODE:
+
+run nba api to get schedule from each year and compile into a massive schedule full_schedule.csv
+getting schedule returns -> date, matchup and game id, here we can remove duplicates
+then we plug this to get game logs which calls another api to get boxscore for each game 
+gamelogs returns -> city, nickname, team_id, win loss flag, home or away, turnovers, rebounds
+                 -> team totals, game/season counts, field goal stats, 3 point stats, free throw stats
+                 -> rebounding stats, assists, fouls, steals, turnovers, blocks
+                 -> poitns and averages
+                 -> calculates offensive efficiency (custom)
+                 -> calculates scoring margin (custom)
+                 -> season, game date, game id
+each gamelog will have two rows, one for home team one for away team and we merge this into one row later
+then gamelog is plugged into getgamelogfeatuerset which builds samples for our model to learn from
+this will merge home and away rows for each game id into one game and it will add even more stats inclduing
+    -> teams offensive efficiency from last game
+    -> last win % before the game
+    -> days rest
+    -> 3 game average margin
+    -> 3 game average offensive efficiency
+    -> whether home team won (targe 1/0)
+    -> teams id
+    -> all same for away
+    -> PLANNING TO ADD
+        -> streaks
+        -> backtoback home and away (1/0)
+        -> momentum index
+        -> opponent defensive trend
+        -> home/away scoring split
+        -> game importance like maybe closer to end of season worth more
+        -> injury/linup sentiment
+        -> travel fatigue (timezones)
+        -> rating per team
+        -> head to head record
+        -> news or betting sentiment
