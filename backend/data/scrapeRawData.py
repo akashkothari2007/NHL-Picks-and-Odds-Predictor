@@ -2,7 +2,7 @@ from nba_api.stats.static import teams
 from nba_api.stats.endpoints import cumestatsteamgames, cumestatsteam
 import pandas as pd, numpy as np, json, difflib, time, requests, os
 
-# ---------- Retry decorator ----------
+#retry func (nba api keeps fucking failing for some reason randomly)
 def retry(func, retries=3, delay=5):
     def wrapper(*args, **kwargs):
         for attempt in range(retries):
@@ -16,7 +16,7 @@ def retry(func, retries=3, delay=5):
     return wrapper
 
 
-# ---------- Season schedule ----------
+#get season schedule (put full thing in full_schedule.csv)
 def getSeasonScheduleFrame(seasons, seasonType):
     def getGameDate(m): return m.partition(' at')[0][:10]
     def getHomeTeam(m): return m.partition(' at')[2]
@@ -76,7 +76,7 @@ def getSeasonScheduleFrame(seasons, seasonType):
     return scheduleFrame
 
 
-# ---------- Single-game metrics ----------
+#after full season for each game get metrics put in gamelogs
 def getSingleGameMetrics(gameID, homeTeamID, awayTeamID, awayTeamNickname, seasonYear, gameDate):
     @retry
     def getGameStats(teamID, gameID, seasonYear):
@@ -112,7 +112,7 @@ def getSingleGameMetrics(gameID, homeTeamID, awayTeamID, awayTeamNickname, seaso
         return pd.DataFrame()
 
 
-# ---------- Game log builder ----------
+#runs that for every game in scheduleframe
 def getGameLogs(scheduleFrame):
     gameLogs = pd.DataFrame()
     out_path = "gameLogs_progress.csv"
@@ -137,52 +137,84 @@ def getGameLogs(scheduleFrame):
     return gameLogs
 
 
-# ---------- Feature engineering ----------
+#uses game logs to make feature set for model (nbaHomeWinLossModelDataset.csv)
 def getGameLogFeatureSet(gameDF):
-    gameDF.sort_values('GAME_DATE', inplace=True)
-    gameDF['LAST_GAME_OE'] = gameDF.groupby(['TEAM_ID', 'SEASON'])['OFFENSIVE_EFFICIENCY'].shift(1)
-    gameDF['LAST_GAME_ROLLING_OE'] = gameDF.groupby(['TEAM_ID', 'SEASON'])['OFFENSIVE_EFFICIENCY'].transform(lambda x: x.rolling(3, 1).mean())
-    home = gameDF[gameDF['CITY'] != 'OPPONENTS']
-    away = gameDF[gameDF['CITY'] == 'OPPONENTS']
-    home.rename(lambda c: f"HOME_{c}" if c not in ['GAME_ID','SEASON'] else c, axis=1, inplace=True)
-    away.rename(lambda c: f"AWAY_{c}" if c not in ['GAME_ID','SEASON'] else c, axis=1, inplace=True)
-    merged = pd.merge(home, away, on=['GAME_ID','SEASON'])
-    merged.drop_duplicates(subset=['GAME_ID','SEASON'], inplace=True)
-    merged.to_csv('nbaHomeWinLossModelDataset.csv', index=False)
-    print("Feature dataset saved.")
+
+    df = gameDF.copy()
+    df.sort_values(["TEAM_ID", "SEASON", "GAME_DATE"], inplace=True)
+
+    # win pct
+    df["TOTAL_GAMES_PRIOR"] = df.groupby(["TEAM_ID", "SEASON"]).cumcount()
+    df["WINS_PRIOR"] = df.groupby(["TEAM_ID", "SEASON"])["W"].shift(1).fillna(0).cumsum()
+    df["LOSSES_PRIOR"] = df.groupby(["TEAM_ID", "SEASON"])["L"].shift(1).fillna(0).cumsum()
+
+    df["TOTAL_WIN_PCTG"] = df["WINS_PRIOR"] / df["TOTAL_GAMES_PRIOR"].replace(0, np.nan)
+
+    # Home/Away win pct
+    df["HOME_WIN_PCTG"] = df["W_HOME"] / (df["W_HOME"] + df["L_HOME"]).replace(0, np.nan)
+    df["AWAY_WIN_PCTG"] = df["W_ROAD"] / (df["W_ROAD"] + df["L_ROAD"]).replace(0, np.nan)
+
+    df["LAST_GAME_HOME_WIN_PCTG"] = df.groupby(["TEAM_ID", "SEASON"])["HOME_WIN_PCTG"].shift(1)
+    df["LAST_GAME_AWAY_WIN_PCTG"] = df.groupby(["TEAM_ID", "SEASON"])["AWAY_WIN_PCTG"].shift(1)
+    df["LAST_GAME_TOTAL_WIN_PCTG"] = df.groupby(["TEAM_ID", "SEASON"])["TOTAL_WIN_PCTG"].shift(1)
+
+    # rest days
+    df["PREV_GAME_DATE"] = df.groupby(["TEAM_ID", "SEASON"])["GAME_DATE"].shift(1)
+    df["GAME_DATE"] = pd.to_datetime(df["GAME_DATE"], errors="coerce")
+    df["PREV_GAME_DATE"] = pd.to_datetime(df["PREV_GAME_DATE"], errors="coerce")
+    df["NUM_REST_DAYS"] = (df["GAME_DATE"] - df["PREV_GAME_DATE"]).dt.days
+    df["NUM_REST_DAYS"] = df["NUM_REST_DAYS"].fillna(7) 
+
+    # rolling features
+    df["LAST_GAME_OE"] = df.groupby(["TEAM_ID", "SEASON"])["OFFENSIVE_EFFICIENCY"].shift(1)
+    df["ROLLING_OE"] = df.groupby(["TEAM_ID", "SEASON"])["OFFENSIVE_EFFICIENCY"].transform(lambda x: x.rolling(3, 1).mean())
+    df["LAST_GAME_ROLLING_OE"] = df.groupby(["TEAM_ID", "SEASON"])["ROLLING_OE"].shift(1)
+
+    df["ROLLING_SCORING_MARGIN"] = df.groupby(["TEAM_ID", "SEASON"])["SCORING_MARGIN"].transform(lambda x: x.rolling(3, 1).mean())
+    df["LAST_GAME_ROLLING_SCORING_MARGIN"] = df.groupby(["TEAM_ID", "SEASON"])["ROLLING_SCORING_MARGIN"].shift(1)
+
+    # Extra non-leaking features
+    df["LAST_GAME_FG_PCT"] = df.groupby(["TEAM_ID", "SEASON"])["FG_PCT"].shift(1)
+    df["LAST_GAME_TOT_REB"] = df.groupby(["TEAM_ID", "SEASON"])["TOT_REB"].shift(1)
+    df["LAST_GAME_TURNOVERS"] = df.groupby(["TEAM_ID", "SEASON"])["TOTAL_TURNOVERS"].shift(1)
+
+    # split home and away and merge
+    home = df[df["CITY"] != "OPPONENTS"]
+    away = df[df["CITY"] == "OPPONENTS"]
+
+    keep_cols_home = [
+        "TEAM_ID","GAME_ID","SEASON","W",
+        "LAST_GAME_OE","LAST_GAME_HOME_WIN_PCTG","NUM_REST_DAYS",
+        "LAST_GAME_AWAY_WIN_PCTG","LAST_GAME_TOTAL_WIN_PCTG",
+        "LAST_GAME_ROLLING_SCORING_MARGIN","LAST_GAME_ROLLING_OE",
+        "LAST_GAME_FG_PCT","LAST_GAME_TOT_REB","LAST_GAME_TURNOVERS"
+    ]
+
+    keep_cols_away = [
+        "TEAM_ID","GAME_ID","SEASON",
+        "LAST_GAME_OE","LAST_GAME_HOME_WIN_PCTG","NUM_REST_DAYS",
+        "LAST_GAME_AWAY_WIN_PCTG","LAST_GAME_TOTAL_WIN_PCTG",
+        "LAST_GAME_ROLLING_SCORING_MARGIN","LAST_GAME_ROLLING_OE",
+        "LAST_GAME_FG_PCT","LAST_GAME_TOT_REB","LAST_GAME_TURNOVERS"
+    ]
+
+    home = home[keep_cols_home].rename(columns={c: "HOME_"+c for c in keep_cols_home if c not in ["GAME_ID","SEASON"]})
+    away = away[keep_cols_away].rename(columns={c: "AWAY_"+c for c in keep_cols_away if c not in ["GAME_ID","SEASON"]})
+
+    merged = pd.merge(home, away, on=["GAME_ID","SEASON"])
+
+    # target
+    merged["HOME_W"] = merged["HOME_W"]
+
+    merged.to_csv("finalModelTraining.csv", index=False)
+    print("Saved finalModelTraining.csv")
     return merged
 
 
-# ---------- Main ----------
+#main func (edited constantly cuz apis fail and progress is saved so just re-running at random points)
 if __name__ == "__main__":
-    # Load schedule CSV
-    scheduleFrame = pd.read_csv("full_schedule.csv")
-
-    # --- Fix data types & formatting ---
-    # GAME_ID → string, re-add missing leading "00"
-    scheduleFrame['GAME_ID'] = (
-        scheduleFrame['GAME_ID']
-        .astype(str)
-        .str.replace(r'\.0$', '', regex=True)
-        .apply(lambda x: x if x.startswith("00") else f"00{x}")
-    )
-
-    # TEAM IDs → int
-    scheduleFrame['HOME_TEAM_ID'] = scheduleFrame['HOME_TEAM_ID'].astype(int)
-    scheduleFrame['AWAY_TEAM_ID'] = scheduleFrame['AWAY_TEAM_ID'].astype(int)
-
-    # SEASON → string
-    scheduleFrame['SEASON'] = scheduleFrame['SEASON'].astype(str)
-
-    # GAME_DATE → proper datetime
-    scheduleFrame['GAME_DATE'] = pd.to_datetime(
-        scheduleFrame['GAME_DATE'].astype(str).str.extract(r'(\d{4}-\d{2}-\d{2})')[0],
-        errors='coerce'
-    )
-
-
-    gameLogs = getGameLogs(scheduleFrame)
-    modelDataset = getGameLogFeatureSet(gameLogs)
+    gameLogs = pd.read_csv("gameLogs.csv")
+    featureSet = getGameLogFeatureSet(gameLogs)
 
 
     
