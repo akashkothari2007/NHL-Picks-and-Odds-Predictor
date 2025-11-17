@@ -147,7 +147,7 @@ def updateAll(current_season=2025):
 
     full_schedule["GAME_ID"] = full_schedule["GAME_ID"].astype(str).str.zfill(10)
     existing_logs["GAME_ID"] = existing_logs["GAME_ID"].astype(str).str.zfill(10)
-
+    
     print("Scraping updated schedule...")
     new_schedule = getSeasonScheduleFrame(current_season)
     new_schedule["GAME_ID"] = new_schedule["GAME_ID"].astype(str).str.zfill(10)
@@ -194,9 +194,10 @@ def updateAll(current_season=2025):
     gamelogs = pd.concat([existing_logs, new_logs], ignore_index=True)
     gamelogs.drop_duplicates(subset=["GAME_ID", "TEAM_ID"], inplace=True)
     gamelogs.to_csv(gamelogs_path, index=False)
-
+    
     # REBUILD FEATURE SET
     print("Rebuilding features...")
+    gamelogs = pd.read_csv(gamelogs_path)
     final = getGameLogFeatureSet(gamelogs)
     final.to_csv(finalmodel_path, index=False)
 

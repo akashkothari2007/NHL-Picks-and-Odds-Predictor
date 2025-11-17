@@ -38,4 +38,6 @@ def predictSingleGame(featureDF):
     return predictSingleGame(featureDF)
 
 
-retrainModel()
+if __name__ == "__main__":
+    # Example usage
+    retrainModel()
