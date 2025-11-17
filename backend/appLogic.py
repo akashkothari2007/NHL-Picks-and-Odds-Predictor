@@ -37,7 +37,5 @@ def predictSingleGame(featureDF):
     from models.RandomForestClassifier import predictSingleGame
     return predictSingleGame(featureDF)
 
-
 if __name__ == "__main__":
-    # Example usage
     retrainModel()

@@ -11,7 +11,7 @@ def api_predictions():
         hI, aI, hT, aT, times, hS, aS = getGamesToday()
         featureDF = buildSingleGameFeatures(hI, aI)
         predictions, probabilities = predictSingleGame(featureDF)
-        
+    
         games = []
         for i in range(len(hI)):
             if (predictions[i] == 1):

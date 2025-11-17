@@ -18,19 +18,19 @@ def getGameLogFeatureSet(gameDF):
     
     # === BASIC WIN PERCENTAGES ===
     df["TOTAL_GAMES_PRIOR"] = df.groupby(["TEAM_ID", "SEASON"]).cumcount()
-    df["WINS_PRIOR"] = df.groupby(["TEAM_ID", "SEASON"])["W"].shift(1).fillna(0).cumsum()
+    df["WINS_PRIOR"] = df.groupby(["TEAM_ID", "SEASON"])["W"].apply(lambda x: x.shift(1).fillna(0).cumsum()).reset_index(level=[0,1], drop=True)
     
     df["TOTAL_WIN_PCTG"] = df["WINS_PRIOR"] / df["TOTAL_GAMES_PRIOR"].replace(0, 1)
     df["TOTAL_WIN_PCTG"] = df["TOTAL_WIN_PCTG"].fillna(0.5)
     
     # === FIX: Cumulative home/away win percentages ===
-    df["HOME_WINS_PRIOR"] = df.groupby(["TEAM_ID", "SEASON"])["W_HOME"].shift(1).fillna(0).cumsum()
-    df["HOME_LOSSES_PRIOR"] = df.groupby(["TEAM_ID", "SEASON"])["L_HOME"].shift(1).fillna(0).cumsum()
+    df["HOME_WINS_PRIOR"] = df.groupby(["TEAM_ID", "SEASON"])["W_HOME"].apply(lambda x: x.shift(1).fillna(0).cumsum()).reset_index(level=[0,1], drop=True)
+    df["HOME_LOSSES_PRIOR"] = df.groupby(["TEAM_ID", "SEASON"])["L_HOME"].apply(lambda x: x.shift(1).fillna(0).cumsum()).reset_index(level=[0,1], drop=True)
     df["HOME_WIN_PCTG"] = df["HOME_WINS_PRIOR"] / (df["HOME_WINS_PRIOR"] + df["HOME_LOSSES_PRIOR"]).replace(0, 1)
     df["HOME_WIN_PCTG"] = df["HOME_WIN_PCTG"].fillna(0.5)
     
-    df["AWAY_WINS_PRIOR"] = df.groupby(["TEAM_ID", "SEASON"])["W_ROAD"].shift(1).fillna(0).cumsum()
-    df["AWAY_LOSSES_PRIOR"] = df.groupby(["TEAM_ID", "SEASON"])["L_ROAD"].shift(1).fillna(0).cumsum()
+    df["AWAY_WINS_PRIOR"] = df.groupby(["TEAM_ID", "SEASON"])["W_ROAD"].apply(lambda x: x.shift(1).fillna(0).cumsum()).reset_index(level=[0,1], drop=True)
+    df["AWAY_LOSSES_PRIOR"] = df.groupby(["TEAM_ID", "SEASON"])["L_ROAD"].apply(lambda x: x.shift(1).fillna(0).cumsum()).reset_index(level=[0,1], drop=True)
     df["AWAY_WIN_PCTG"] = df["AWAY_WINS_PRIOR"] / (df["AWAY_WINS_PRIOR"] + df["AWAY_LOSSES_PRIOR"]).replace(0, 1)
     df["AWAY_WIN_PCTG"] = df["AWAY_WIN_PCTG"].fillna(0.5)
     
@@ -170,207 +170,179 @@ def getGameLogFeatureSet(gameDF):
     return merged
 
 
-def getSingleGameFeatureSet(home_team_ids, away_team_ids, game_date=None, current_season="2024-25"):
-    """
-    Calculate features for multiple upcoming games.
-    
-    Args:
-        home_team_ids: List of home team IDs (or single int)
-        away_team_ids: List of away team IDs (or single int)
-        game_date: Date for prediction (defaults to today)
-        current_season: Current NBA season (e.g., "2024-25")
-    
-    Returns:
-        DataFrame with features for each game (ready for model.predict())
-    """
+def getSingleGameFeatureSet(home_team_ids, away_team_ids, game_date=None, current_season="2025-26"):
     import pandas as pd
-    import numpy as np
     from datetime import datetime
     import os
-    
+
     if isinstance(home_team_ids, int):
         home_team_ids = [home_team_ids]
         away_team_ids = [away_team_ids]
-    
+
     if game_date is None:
         game_date = datetime.now()
     else:
         game_date = pd.to_datetime(game_date)
-    
+
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    gamelogs_path = os.path.join(base_dir, "processedData", "gameLogs.csv")
-    
-    print(f"Loading gameLogs from {gamelogs_path}...")
-    gameLogs = pd.read_csv(gamelogs_path)
-    gameLogs['GAME_DATE'] = pd.to_datetime(gameLogs['GAME_DATE'], format='mixed')
-    gameLogs['TEAM_ID'] = gameLogs['TEAM_ID'].astype(int)
-    
-    past_games = gameLogs[gameLogs['GAME_DATE'] < game_date].copy()
-    
-    print(f"Calculating features for {len(home_team_ids)} games (Season: {current_season})...")
-    
-    all_features = []
-    
-    for home_id, away_id in zip(home_team_ids, away_team_ids):
-        features = calculate_single_game_features(home_id, away_id, game_date, past_games, current_season)
-        all_features.append(features)
-    
-    features_df = pd.DataFrame(all_features)
-    
-    feature_columns = [
+    logs_path = os.path.join(base_dir, "processedData", "gameLogs.csv")
+
+    past = pd.read_csv(logs_path)
+    past["GAME_DATE"] = pd.to_datetime(past["GAME_DATE"], format="mixed")
+    past["TEAM_ID"] = past["TEAM_ID"].astype(int)
+
+    past = past[past["GAME_DATE"] < game_date]
+
+    all_rows = []
+    for home, away in zip(home_team_ids, away_team_ids):
+        row = calculate_single_game_features(home, away, game_date, past, current_season)
+        all_rows.append(row)
+
+    df = pd.DataFrame(all_rows)
+
+    # Ensure ordering EXACTLY matches training columns
+    ordered_cols = [
         'HOME_LAST_GAME_HOME_WIN_PCTG', 'HOME_LAST_GAME_AWAY_WIN_PCTG', 
         'HOME_LAST_GAME_TOTAL_WIN_PCTG', 'HOME_NUM_REST_DAYS', 'HOME_IS_BACK_TO_BACK',
         'HOME_LAST_GAME_ROLLING_OE', 'HOME_LAST_GAME_ROLLING_SCORING_MARGIN',
         'HOME_LAST_GAME_ROLLING_FG_PCT', 'HOME_LAST_GAME_LAST_3_WINS',
+        
         'AWAY_LAST_GAME_HOME_WIN_PCTG', 'AWAY_LAST_GAME_AWAY_WIN_PCTG',
         'AWAY_LAST_GAME_TOTAL_WIN_PCTG', 'AWAY_NUM_REST_DAYS', 'AWAY_IS_BACK_TO_BACK',
         'AWAY_LAST_GAME_ROLLING_OE', 'AWAY_LAST_GAME_ROLLING_SCORING_MARGIN',
         'AWAY_LAST_GAME_ROLLING_FG_PCT', 'AWAY_LAST_GAME_LAST_3_WINS',
+
         'H2H_HOME_WIN_PCT', 'H2H_HOME_AVG_MARGIN',
         'WIN_PCTG_DIFF', 'OE_DIFF', 'SCORING_MARGIN_DIFF', 'REST_DIFF',
         'HOME_ADVANTAGE', 'FG_PCT_DIFF', 'FORM_DIFF'
     ]
-    
-    features_df = features_df[feature_columns]
-    
-    print(f"✓ Features calculated for {len(features_df)} games")
-    
-    return features_df
+
+    df = df[ordered_cols]
+
+    return df
 
 
 def calculate_single_game_features(home_id, away_id, game_date, past_games, current_season):
     import pandas as pd
-    import numpy as np
-    
-    # === FIX: Filter to current season FIRST ===
-    season_games = past_games[past_games['SEASON'] == current_season].copy()
-    
-    # === HOME TEAM FEATURES ===
-    home_games = season_games[season_games['TEAM_ID'] == home_id].sort_values('GAME_DATE')
-    
-    if len(home_games) < 5:
-        print(f"⚠️  Warning: Only {len(home_games)} games for home team {home_id} in {current_season}")
+
+    # Filter only current season
+    season_games = past_games[past_games["SEASON"] == current_season].copy()
+
+    # ----------------------------
+    # Helper to compute training-style rolling features
+    # ----------------------------
+    def compute_team_features(team_id):
+        team_games = season_games[season_games["TEAM_ID"] == team_id].sort_values("GAME_DATE")
+
+        # If not enough games → neutral
+        if len(team_games) == 0:
+            return None
+
+        # LAST GAME VALUES
+        last = team_games.iloc[-1]
+        last_date = pd.to_datetime(last["GAME_DATE"])
+        rest_days = (game_date - last_date).days
+        is_b2b = 1 if rest_days == 1 else 0
+
+        # TOTAL WIN PCT (TRAINING STYLE)
+        total_wins = team_games["W"].sum()
+        total_losses = team_games["L"].sum()
+        total_win_pct = total_wins / max(total_wins + total_losses, 1)
+
+        # HOME/AWAY WIN %
+        home_wins = team_games["W_HOME"].sum()
+        home_losses = team_games["L_HOME"].sum()
+        home_win_pct = home_wins / max(home_wins + home_losses, 1)
+
+        away_wins = team_games["W_ROAD"].sum()
+        away_losses = team_games["L_ROAD"].sum()
+        away_win_pct = away_wins / max(away_wins + away_losses, 1)
+
+        # ROLLING (LAST 5 GAMES) – EXACT MATCH TO TRAINING
+        recent = team_games.tail(5)
+        rolling_oe = recent["OFFENSIVE_EFFICIENCY"].mean()
+        rolling_margin = recent["SCORING_MARGIN"].mean()
+        rolling_fg = recent["FG_PCT"].mean()
+        last_3_wins = recent["W"].tail(3).sum()
+
+        return {
+            "LAST_GAME_HOME_WIN_PCTG": home_win_pct,
+            "LAST_GAME_AWAY_WIN_PCTG": away_win_pct,
+            "LAST_GAME_TOTAL_WIN_PCTG": total_win_pct,
+            "NUM_REST_DAYS": rest_days,
+            "IS_BACK_TO_BACK": is_b2b,
+            "LAST_GAME_ROLLING_OE": rolling_oe,
+            "LAST_GAME_ROLLING_SCORING_MARGIN": rolling_margin,
+            "LAST_GAME_ROLLING_FG_PCT": rolling_fg,
+            "LAST_GAME_LAST_3_WINS": last_3_wins
+        }
+
+    # Compute home + away features
+    home = compute_team_features(home_id)
+    away = compute_team_features(away_id)
+
+    if home is None or away is None:
         return get_neutral_features()
-    
-    home_recent = home_games.tail(5)
-    
-    home_rolling_oe = home_recent['OFFENSIVE_EFFICIENCY'].mean()
-    home_rolling_margin = home_recent['SCORING_MARGIN'].mean()
-    home_rolling_fg = home_recent['FG_PCT'].mean()
-    home_last_3_wins = home_recent['W'].tail(3).sum()
-    
-    # Sum all games in current season
-    home_total_wins = home_games['W'].sum()
-    home_total_losses = home_games['L'].sum()
-    home_total_games = home_total_wins + home_total_losses
-    home_total_win_pct = home_total_wins / max(home_total_games, 1)
-    
-    home_home_wins = home_games['W_HOME'].sum()
-    home_home_losses = home_games['L_HOME'].sum()
-    home_home_win_pct = home_home_wins / max(home_home_wins + home_home_losses, 1)
-    
-    home_away_wins = home_games['W_ROAD'].sum()
-    home_away_losses = home_games['L_ROAD'].sum()
-    home_away_win_pct = home_away_wins / max(home_away_wins + home_away_losses, 1)
-    
-    home_last = home_games.iloc[-1]
-    home_last_game_date = pd.to_datetime(home_last['GAME_DATE'])
-    home_rest_days = (game_date - home_last_game_date).days
-    home_is_b2b = 1 if home_rest_days == 1 else 0
-    
 
-
-    # === AWAY TEAM FEATURES ===
-    away_games = season_games[season_games['TEAM_ID'] == away_id].sort_values('GAME_DATE')
-    
-    if len(away_games) < 5:
-        print(f"⚠️  Warning: Only {len(away_games)} games for away team {away_id} in {current_season}")
-        return get_neutral_features()
-    
-    away_recent = away_games.tail(5)
-    
-    away_rolling_oe = away_recent['OFFENSIVE_EFFICIENCY'].mean()
-    away_rolling_margin = away_recent['SCORING_MARGIN'].mean()
-    away_rolling_fg = away_recent['FG_PCT'].mean()
-    away_last_3_wins = away_recent['W'].tail(3).sum()
-    
-    away_total_wins = away_games['W'].sum()
-    away_total_losses = away_games['L'].sum()
-    away_total_games = away_total_wins + away_total_losses
-    away_total_win_pct = away_total_wins / max(away_total_games, 1)
-    
-    away_home_wins = away_games['W_HOME'].sum()
-    away_home_losses = away_games['L_HOME'].sum()
-    away_home_win_pct = away_home_wins / max(away_home_wins + away_home_losses, 1)
-    
-    away_away_wins = away_games['W_ROAD'].sum()
-    away_away_losses = away_games['L_ROAD'].sum()
-    away_away_win_pct = away_away_wins / max(away_away_wins + away_away_losses, 1)
-    
-    away_last = away_games.iloc[-1]
-    away_last_game_date = pd.to_datetime(away_last['GAME_DATE'])
-    away_rest_days = (game_date - away_last_game_date).days
-    away_is_b2b = 1 if away_rest_days == 1 else 0
-
-
-    
-    # === HEAD-TO-HEAD (uses all historical data, not just current season) ===
-    h2h_games = past_games[
-        (past_games['TEAM_ID'] == home_id) | (past_games['TEAM_ID'] == away_id)
+    # ----------------------------
+    # HEAD TO HEAD (TRAINING STYLE)
+    # ----------------------------
+    h2h = past_games[
+        (past_games["TEAM_ID"] == home_id) |
+        (past_games["TEAM_ID"] == away_id)
     ]
-    
-    home_h2h_game_ids = set(h2h_games[h2h_games['TEAM_ID'] == home_id]['GAME_ID'])
-    away_h2h_game_ids = set(h2h_games[h2h_games['TEAM_ID'] == away_id]['GAME_ID'])
-    common_game_ids = home_h2h_game_ids.intersection(away_h2h_game_ids)
-    
-    if len(common_game_ids) >= 2:
-        h2h = h2h_games[h2h_games['GAME_ID'].isin(common_game_ids)].sort_values('GAME_DATE').tail(10)
-        home_h2h = h2h[h2h['TEAM_ID'] == home_id]
-        
-        if len(home_h2h) > 0:
-            h2h_home_win_pct = home_h2h['W'].sum() / len(home_h2h)
-            h2h_home_avg_margin = home_h2h['SCORING_MARGIN'].mean()
-        else:
-            h2h_home_win_pct = 0.5
-            h2h_home_avg_margin = 0.0
+
+    home_ids = set(h2h[h2h["TEAM_ID"] == home_id]["GAME_ID"])
+    away_ids = set(h2h[h2h["TEAM_ID"] == away_id]["GAME_ID"])
+    common_games = home_ids.intersection(away_ids)
+
+    if len(common_games) >= 2:
+        last_h2h = h2h[h2h["GAME_ID"].isin(common_games)].sort_values("GAME_DATE").tail(10)
+        home_h2h = last_h2h[last_h2h["TEAM_ID"] == home_id]
+
+        h2h_win_pct = home_h2h["W"].sum() / len(home_h2h)
+        h2h_margin = home_h2h["SCORING_MARGIN"].mean()
     else:
-        h2h_home_win_pct = 0.5
-        h2h_home_avg_margin = 0.0
-    
-    # === BUILD FEATURES DICT ===
+        h2h_win_pct = 0.5
+        h2h_margin = 0.0
+
+    # ----------------------------
+    # BUILD FINAL MATCHING FEATURE SET
+    # ----------------------------
     features = {
-        'HOME_LAST_GAME_HOME_WIN_PCTG': home_home_win_pct,
-        'HOME_LAST_GAME_AWAY_WIN_PCTG': home_away_win_pct,
-        'HOME_LAST_GAME_TOTAL_WIN_PCTG': home_total_win_pct,
-        'HOME_NUM_REST_DAYS': home_rest_days,
-        'HOME_IS_BACK_TO_BACK': home_is_b2b,
-        'HOME_LAST_GAME_ROLLING_OE': home_rolling_oe,
-        'HOME_LAST_GAME_ROLLING_SCORING_MARGIN': home_rolling_margin,
-        'HOME_LAST_GAME_ROLLING_FG_PCT': home_rolling_fg,
-        'HOME_LAST_GAME_LAST_3_WINS': home_last_3_wins,
-        
-        'AWAY_LAST_GAME_HOME_WIN_PCTG': away_home_win_pct,
-        'AWAY_LAST_GAME_AWAY_WIN_PCTG': away_away_win_pct,
-        'AWAY_LAST_GAME_TOTAL_WIN_PCTG': away_total_win_pct,
-        'AWAY_NUM_REST_DAYS': away_rest_days,
-        'AWAY_IS_BACK_TO_BACK': away_is_b2b,
-        'AWAY_LAST_GAME_ROLLING_OE': away_rolling_oe,
-        'AWAY_LAST_GAME_ROLLING_SCORING_MARGIN': away_rolling_margin,
-        'AWAY_LAST_GAME_ROLLING_FG_PCT': away_rolling_fg,
-        'AWAY_LAST_GAME_LAST_3_WINS': away_last_3_wins,
-        
-        'H2H_HOME_WIN_PCT': h2h_home_win_pct,
-        'H2H_HOME_AVG_MARGIN': h2h_home_avg_margin,
-        
-        'WIN_PCTG_DIFF': home_total_win_pct - away_total_win_pct,
-        'OE_DIFF': home_rolling_oe - away_rolling_oe,
-        'SCORING_MARGIN_DIFF': home_rolling_margin - away_rolling_margin,
-        'REST_DIFF': home_rest_days - away_rest_days,
-        'HOME_ADVANTAGE': home_home_win_pct - home_away_win_pct,
-        'FG_PCT_DIFF': home_rolling_fg - away_rolling_fg,
-        'FORM_DIFF': home_last_3_wins - away_last_3_wins,
+        "HOME_LAST_GAME_HOME_WIN_PCTG": home["LAST_GAME_HOME_WIN_PCTG"],
+        "HOME_LAST_GAME_AWAY_WIN_PCTG": home["LAST_GAME_AWAY_WIN_PCTG"],
+        "HOME_LAST_GAME_TOTAL_WIN_PCTG": home["LAST_GAME_TOTAL_WIN_PCTG"],
+        "HOME_NUM_REST_DAYS": home["NUM_REST_DAYS"],
+        "HOME_IS_BACK_TO_BACK": home["IS_BACK_TO_BACK"],
+        "HOME_LAST_GAME_ROLLING_OE": home["LAST_GAME_ROLLING_OE"],
+        "HOME_LAST_GAME_ROLLING_SCORING_MARGIN": home["LAST_GAME_ROLLING_SCORING_MARGIN"],
+        "HOME_LAST_GAME_ROLLING_FG_PCT": home["LAST_GAME_ROLLING_FG_PCT"],
+        "HOME_LAST_GAME_LAST_3_WINS": home["LAST_GAME_LAST_3_WINS"],
+
+        "AWAY_LAST_GAME_HOME_WIN_PCTG": away["LAST_GAME_HOME_WIN_PCTG"],
+        "AWAY_LAST_GAME_AWAY_WIN_PCTG": away["LAST_GAME_AWAY_WIN_PCTG"],
+        "AWAY_LAST_GAME_TOTAL_WIN_PCTG": away["LAST_GAME_TOTAL_WIN_PCTG"],
+        "AWAY_NUM_REST_DAYS": away["NUM_REST_DAYS"],
+        "AWAY_IS_BACK_TO_BACK": away["IS_BACK_TO_BACK"],
+        "AWAY_LAST_GAME_ROLLING_OE": away["LAST_GAME_ROLLING_OE"],
+        "AWAY_LAST_GAME_ROLLING_SCORING_MARGIN": away["LAST_GAME_ROLLING_SCORING_MARGIN"],
+        "AWAY_LAST_GAME_ROLLING_FG_PCT": away["LAST_GAME_ROLLING_FG_PCT"],
+        "AWAY_LAST_GAME_LAST_3_WINS": away["LAST_GAME_LAST_3_WINS"],
+
+        "H2H_HOME_WIN_PCT": h2h_win_pct,
+        "H2H_HOME_AVG_MARGIN": h2h_margin,
+
+        # DIFF FEATURES (match training naming)
+        "WIN_PCTG_DIFF": home["LAST_GAME_TOTAL_WIN_PCTG"] - away["LAST_GAME_TOTAL_WIN_PCTG"],
+        "OE_DIFF": home["LAST_GAME_ROLLING_OE"] - away["LAST_GAME_ROLLING_OE"],
+        "SCORING_MARGIN_DIFF": home["LAST_GAME_ROLLING_SCORING_MARGIN"] - away["LAST_GAME_ROLLING_SCORING_MARGIN"],
+        "REST_DIFF": home["NUM_REST_DAYS"] - away["NUM_REST_DAYS"],
+        "HOME_ADVANTAGE": home["LAST_GAME_HOME_WIN_PCTG"] - home["LAST_GAME_AWAY_WIN_PCTG"],
+        "FG_PCT_DIFF": home["LAST_GAME_ROLLING_FG_PCT"] - away["LAST_GAME_ROLLING_FG_PCT"],
+        "FORM_DIFF": home["LAST_GAME_LAST_3_WINS"] - away["LAST_GAME_LAST_3_WINS"],
     }
-    
+
     return features
 
 
