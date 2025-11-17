@@ -3,6 +3,7 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 from sklearn.ensemble import RandomForestClassifier
+from xgboost import XGBClassifier
 
 
 
@@ -20,29 +21,35 @@ def trainModel():
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
 
     # Best hyperparameters found from tuning
-    rf_best = RandomForestClassifier(
-        n_estimators=400,
-        max_depth=12,
-        min_samples_split=2,
-        min_samples_leaf=1,
-        random_state=42,
-        n_jobs=-1
-    )
+    best_params = {
+        "colsample_bytree": 0.8,
+        "learning_rate": 0.05,
+        "max_depth": 3,
+        "subsample": 1.0,
+        "n_estimators": 300,    
+        "eval_metric": "logloss",
+        "random_state": 42,
+        "n_jobs": -1
+    }
 
+    model = XGBClassifier(**best_params)
 
     #train and evaluate and save the model using pickle
-    rf_best.fit(X_train, y_train)
+    model.fit(X_train, y_train)
+
+    
+
 
     with open('models/nba_model.pkl', 'wb') as f:
-        pickle.dump(rf_best, f)
+        pickle.dump(model, f)
 
 
-    rf_acc = accuracy_score(y_test, rf_best.predict(X_test))
-    print(f"Tuned Random Forest: {rf_acc:.4f}")
-    y_pred = rf_best.predict(X_test)
+    rf_acc = accuracy_score(y_test, model.predict(X_test))
+    print(f"Tuned XGBoost Forest: {rf_acc:.4f}")
+    y_pred = model.predict(X_test)
 
     acc = accuracy_score(y_test, y_pred)
-    print(f"\n🔍 Tuned Random Forest Accuracy: {acc:.4f}")
+    print(f"\nTuned XGBoost Accuracy: {acc:.4f}")
 
     from sklearn.metrics import (
         classification_report,
@@ -64,5 +71,26 @@ def trainModel():
 
 
 
-def predictSingleGame(featureDF):
-    pass
+def predictSingleGame(df):
+    import pickle
+
+    with open("models/nba_model.pkl", "rb") as f:
+        model = pickle.load(f)
+    predictions = []
+    probabilities = []
+    for index, row in df.iterrows():
+        prob = model.predict_proba(df)[index]
+        prediction = model.predict(df)[index]
+        predictions.append(prediction)
+        if (prediction == 1):
+            probabilities.append(prob[1])
+        else:
+            probabilities.append(prob[0])
+    return predictions, probabilities
+
+
+
+
+
+
+
