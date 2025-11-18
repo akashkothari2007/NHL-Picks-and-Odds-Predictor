@@ -7,7 +7,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('http://127.0.0.1:5000/api/predictions')
+    fetch('https://nba-predictor-backend.onrender.com/api/predictions')
       .then(res => res.json())
       .then(data => {
         setGames(data.games);
