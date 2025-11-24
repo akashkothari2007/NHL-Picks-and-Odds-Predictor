@@ -31,7 +31,7 @@ export default function Home() {
           NBA Predictor
         </h1>
         <p className="text-gray-400 mb-10 text-lg">
-          64.8% accuracy • Machine Learning powered - Akash Kothari
+          65.6% accuracy • Machine Learning powered - Akash Kothari
         </p>
 
         {/* List */}
