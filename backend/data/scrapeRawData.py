@@ -9,9 +9,9 @@ from datetime import datetime, timedelta
 
 from nba_api.stats.static import teams
 from nba_api.stats.endpoints import cumestatsteamgames, cumestatsteam
+import random
 
-
-def retry(func, retries=5, delay=3):  # More retries, longer delay
+def retry(func, retries=5, delay=random.randint(5, 7)):  # More retries, longer delay
     def wrap(*args, **kwargs):
         for attempt in range(retries):
             try:
