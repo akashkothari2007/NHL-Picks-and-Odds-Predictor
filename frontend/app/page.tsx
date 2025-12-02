@@ -5,9 +5,8 @@ import { useEffect, useState } from 'react';
 export default function Home() {
   const [games, setGames] = useState([]);
   const [loading, setLoading] = useState(true);
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://nba-predictor-backend.onrender.com';
   useEffect(() => {
-    fetch(`${API_URL}/api/predictions`)
+    fetch('https://nba-predictor-backend.onrender.com/api/predictions')
       .then(res => res.json())
       .then(data => {
         setGames(data.games);
